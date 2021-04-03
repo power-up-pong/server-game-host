@@ -1,6 +1,7 @@
 import os
 import paho.mqtt.client as mqtt
 import random
+import json
 from time import sleep
 
 # Constants
@@ -12,7 +13,7 @@ PASSWORD = 'piot'  # broker password (if required)
 
 PADDLE_WIDTH = 50
 MAX_PADDLE_VALUE = 1023
-GAME_CYCLE = 0.1
+GAME_CYCLE = 0.03
 TIME_AFTER_SCORE = 1
 PADDLE_HALF = PADDLE_WIDTH // 2
 X_CONSTRAINTS = [0, MAX_PADDLE_VALUE + PADDLE_HALF]
@@ -25,7 +26,6 @@ class Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
-        self.reset()
 
         self.client = mqtt.Client()
         self.client.username_pw_set(USERNAME, password=PASSWORD)
@@ -36,13 +36,15 @@ class Game_State:
         self.client.connect(BROKER, PORT, 60)
         self.client.loop_start()
 
+        self.reset()
+
     def reset(self):
-        self.publish_state()
         self.paddle_pos1 = Y_MIDDLE
         self.paddle_pos2 = Y_MIDDLE
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
-        self.ball_Xvelocity = 70 * random.choice([-1, 1])
-        self.ball_Yvelocity = 50 * random.choice([-1, 1])
+        self.ball_Xvelocity = 20 * random.choice([-1, 1])
+        self.ball_Yvelocity = 15 * random.choice([-1, 1])
+        self.publish_state()
         sleep(TIME_AFTER_SCORE)
 
     def on_connect(self, client, userdata, flags, rc):
@@ -59,8 +61,15 @@ class Game_State:
             self.paddle_pos2 = msg.payload
 
     def get_state(self):
-        return '\{\n"paddle1": {},\n"paddle2": {},\n"ball": {},\n"player1_score": {},\n"player2_score": {}\n\}'.format(
-            self.paddle_pos1, self.paddle_pos2, self.ball_pos, self.player1_score, self.player2_score)
+        game_state = {
+            'paddle1': self.paddle_pos1,
+            'paddle2': self.paddle_pos2,
+            'ball': self.ball_pos,
+            'player1_score': self.player1_score,
+            'player2_score': self.player2_score
+        }
+        # print(json.dumps(game_state))
+        return json.dumps(game_state)
 
     def run_game_loop(self):
         self.update_ball_pos()
