@@ -85,25 +85,31 @@ class Game_State:
         self.ball_pos[0] += self.ball_velocity[0]
         self.ball_pos[1] += self.ball_velocity[1]
 
+        # Once the ball reaches the left side...
         if self.ball_pos[0] < X_CONSTRAINTS[0]:
+            # Check if the ball hits player 1's paddle. If it does, update ball velocity. Otherwise, increase player 2's score and reset
             if self.paddle_pos1 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos1 + PADDLE_HALF:
                 self.update_ball_velocity(1)
             else:
                 self.player2_score += 1
                 self.reset()
 
+        # Once the ball reaches the right side...
         elif self.ball_pos[0] > X_CONSTRAINTS[1]:
+            # Check if the ball hits player 2's paddle. If it does, update ball velocity. Otherwise, increase player 1's score and reset
             if self.paddle_pos2 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos2 + PADDLE_HALF:
                 self.update_ball_velocity(2)
             else:
                 self.player1_score += 1
                 self.reset()
 
+        # Bounce the ball off the ceiling and floor
         if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
             self.ball_velocity[1] = -self.ball_velocity[1]
 
     # https://gamedev.stackexchange.com/questions/4253/in-pong-how-do-you-calculate-the-balls-direction-when-it-bounces-off-the-paddl
     def update_ball_velocity(self, paddle_num):
+        # Select which paddle to evaluate and reset the ball position so it's not off the screen
         paddle_pos = 0
         if paddle_num == 1:
             paddle_pos = self.paddle_pos1
@@ -112,12 +118,15 @@ class Game_State:
             paddle_pos = self.paddle_pos2
             self.ball_pos[0] = X_CONSTRAINTS[1]
 
+        # Calculate the angle and update the velocity
         relative_intersectY = paddle_pos - self.ball_pos[1]
         normalized_relative_intersectY = (relative_intersectY / (PADDLE_HALF))
         bounce_angle = normalized_relative_intersectY * MAX_BOUNCE_ANGLE
         prior_velocityX = self.ball_velocity[0]
         self.ball_velocity[0] = int(BALL_SPEED * math.cos(bounce_angle))
         self.ball_velocity[1] = int(BALL_SPEED * -math.sin(bounce_angle))
+
+        # Switch the direction if the sign is wrongf
         if (prior_velocityX < 0 and self.ball_velocity[0] < 0) or (prior_velocityX > 0 and self.ball_velocity[0] > 0):
             self.ball_velocity[0] = -self.ball_velocity[0]
 
