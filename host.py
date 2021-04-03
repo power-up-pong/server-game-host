@@ -2,6 +2,7 @@ import os
 import paho.mqtt.client as mqtt
 import random
 import json
+import math
 from time import sleep
 
 # Constants
@@ -15,6 +16,9 @@ PADDLE_WIDTH = 50
 MAX_PADDLE_VALUE = 1023
 GAME_CYCLE = 0.03
 TIME_AFTER_SCORE = 1
+MAX_BOUNCE_ANGLE = math.pi * 5 / 12
+BALL_SPEED = 20
+
 PADDLE_HALF = PADDLE_WIDTH // 2
 X_CONSTRAINTS = [0, MAX_PADDLE_VALUE + PADDLE_HALF]
 Y_CONSTRAINTS = [0, MAX_PADDLE_VALUE + PADDLE_HALF]
@@ -42,8 +46,7 @@ class Game_State:
         self.paddle_pos1 = Y_MIDDLE
         self.paddle_pos2 = Y_MIDDLE
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
-        self.ball_Xvelocity = 20 * random.choice([-1, 1])
-        self.ball_Yvelocity = 15 * random.choice([-1, 1])
+        self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
         self.publish_state()
         sleep(TIME_AFTER_SCORE)
 
@@ -79,25 +82,44 @@ class Game_State:
         self.run_game_loop()
 
     def update_ball_pos(self):
-        self.ball_pos[0] += self.ball_Xvelocity
-        self.ball_pos[1] += self.ball_Yvelocity
+        self.ball_pos[0] += self.ball_velocity[0]
+        self.ball_pos[1] += self.ball_velocity[1]
 
         if self.ball_pos[0] < X_CONSTRAINTS[0]:
             if self.paddle_pos1 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos1 + PADDLE_HALF:
-                self.ball_Xvelocity = -self.ball_Xvelocity
+                self.update_ball_velocity(1)
             else:
                 self.player2_score += 1
                 self.reset()
 
         elif self.ball_pos[0] > X_CONSTRAINTS[1]:
             if self.paddle_pos2 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos2 + PADDLE_HALF:
-                self.ball_Xvelocity = -self.ball_Xvelocity
+                self.update_ball_velocity(2)
             else:
                 self.player1_score += 1
                 self.reset()
 
         if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
-            self.ball_Yvelocity = -self.ball_Yvelocity
+            self.ball_velocity[1] = -self.ball_velocity[1]
+
+    # https://gamedev.stackexchange.com/questions/4253/in-pong-how-do-you-calculate-the-balls-direction-when-it-bounces-off-the-paddl
+    def update_ball_velocity(self, paddle_num):
+        paddle_pos = 0
+        if paddle_num == 1:
+            paddle_pos = self.paddle_pos1
+            self.ball_pos[0] = X_CONSTRAINTS[0]
+        else:
+            paddle_pos = self.paddle_pos2
+            self.ball_pos[0] = X_CONSTRAINTS[1]
+
+        relative_intersectY = paddle_pos - self.ball_pos[1]
+        normalized_relative_intersectY = (relative_intersectY / (PADDLE_HALF))
+        bounce_angle = normalized_relative_intersectY * MAX_BOUNCE_ANGLE
+        prior_velocityX = self.ball_velocity[0]
+        self.ball_velocity[0] = int(BALL_SPEED * math.cos(bounce_angle))
+        self.ball_velocity[1] = int(BALL_SPEED * -math.sin(bounce_angle))
+        if (prior_velocityX < 0 and self.ball_velocity[0] < 0) or (prior_velocityX > 0 and self.ball_velocity[0] > 0):
+            self.ball_velocity[0] = -self.ball_velocity[0]
 
     def publish_state(self):
         (result, num) = self.client.publish(
