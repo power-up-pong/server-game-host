@@ -14,7 +14,7 @@ PASSWORD = 'piot'  # broker password (if required)
 
 PADDLE_WIDTH = 50
 MAX_PADDLE_VALUE = 1023
-GAME_CYCLE = 0.03
+GAME_CYCLE = 0.1
 TIME_AFTER_SCORE = 1
 MAX_BOUNCE_ANGLE = math.pi * 5 / 12
 BALL_SPEED = 20
@@ -35,8 +35,6 @@ class Game_State:
         self.client.username_pw_set(USERNAME, password=PASSWORD)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
-        self.client.subscribe("pup/ctrl1", qos=QOS)
-        self.client.subscribe("pup/ctrl2", qos=QOS)
         self.client.connect(BROKER, PORT, 60)
         self.client.loop_start()
 
@@ -48,7 +46,7 @@ class Game_State:
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
         self.publish_state()
-        sleep(TIME_AFTER_SCORE)
+        # sleep(TIME_AFTER_SCORE)
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -59,9 +57,9 @@ class Game_State:
 
     def on_message(self, client, data, msg):
         if msg.topic == "pup/ctrl1":
-            self.paddle_pos1 = msg.payload
+            self.paddle_pos1 = int(msg.payload)
         elif msg.topic == "pup/ctrl2":
-            self.paddle_pos2 = msg.payload
+            self.paddle_pos2 = int(msg.payload)
 
     def get_state(self):
         game_state = {
@@ -77,8 +75,8 @@ class Game_State:
     def run_game_loop(self):
         self.update_ball_pos()
 
-        self.publish_state()
         sleep(GAME_CYCLE)
+        self.publish_state()
         self.run_game_loop()
 
     def update_ball_pos(self):
@@ -126,7 +124,7 @@ class Game_State:
         self.ball_velocity[0] = int(BALL_SPEED * math.cos(bounce_angle))
         self.ball_velocity[1] = int(BALL_SPEED * -math.sin(bounce_angle))
 
-        # Switch the direction if the sign is wrongf
+        # Switch the direction if the sign is wrong
         if (prior_velocityX < 0 and self.ball_velocity[0] < 0) or (prior_velocityX > 0 and self.ball_velocity[0] > 0):
             self.ball_velocity[0] = -self.ball_velocity[0]
 
@@ -141,9 +139,12 @@ class Game_State:
 
 
 gs = Game_State()
+client = gs.get_client()
+client.subscribe("pup/ctrl1", qos=QOS)
+client.subscribe("pup/ctrl2", qos=QOS)
+
 try:
     gs.run_game_loop()
 except KeyboardInterrupt:
-    client = gs.get_client()
     client.loop_stop()
     client.disconnect()
