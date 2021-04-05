@@ -69,7 +69,7 @@ class Game_State:
             'player1_score': self.player1_score,
             'player2_score': self.player2_score
         }
-        # print(json.dumps(game_state))
+        print(json.dumps(game_state))
         return json.dumps(game_state)
 
     def run_game_loop(self):
