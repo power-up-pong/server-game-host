@@ -6,7 +6,7 @@ import math
 from time import sleep
 
 # Constants
-BROKER = 'iot.cs.calvin.edu'  # CS MQTT broker
+BROKER = 'test.mosquitto.org'  # CS MQTT broker
 PORT = 1883
 QOS = 0
 USERNAME = 'cs326'  # broker username (if required)
@@ -14,7 +14,7 @@ PASSWORD = 'piot'  # broker password (if required)
 
 PADDLE_WIDTH = 50
 MAX_PADDLE_VALUE = 1023
-GAME_CYCLE = 0.1
+GAME_CYCLE = 0.03
 TIME_AFTER_SCORE = 1
 MAX_BOUNCE_ANGLE = math.pi * 5 / 12
 BALL_SPEED = 20
@@ -26,7 +26,7 @@ X_MIDDLE = X_CONSTRAINTS[1] // 2
 Y_MIDDLE = Y_CONSTRAINTS[1] // 2
 
 
-class Game_State:
+class PUP_Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
@@ -46,7 +46,7 @@ class Game_State:
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
         self.publish_state()
-        # sleep(TIME_AFTER_SCORE)
+        sleep(TIME_AFTER_SCORE)
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -69,15 +69,15 @@ class Game_State:
             'player1_score': self.player1_score,
             'player2_score': self.player2_score
         }
+
         print(json.dumps(game_state))
         return json.dumps(game_state)
 
     def run_game_loop(self):
-        self.update_ball_pos()
-
-        sleep(GAME_CYCLE)
-        self.publish_state()
-        self.run_game_loop()
+        while True:
+            self.update_ball_pos()
+            self.publish_state()
+            sleep(GAME_CYCLE)
 
     def update_ball_pos(self):
         self.ball_pos[0] += self.ball_velocity[0]
@@ -138,7 +138,7 @@ class Game_State:
         return self.client
 
 
-gs = Game_State()
+gs = PUP_Game_State()
 client = gs.get_client()
 client.subscribe("pup/ctrl1", qos=QOS)
 client.subscribe("pup/ctrl2", qos=QOS)
