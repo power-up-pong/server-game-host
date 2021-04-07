@@ -23,8 +23,8 @@ POWERUP_GENERATION_TIME = 5
 POWERUP_RADIUS = 10
 
 PADDLE_HALF = PADDLE_WIDTH // 2
-X_CONSTRAINTS = [0, MAX_PADDLE_VALUE + PADDLE_WIDTH]
-Y_CONSTRAINTS = [0, MAX_PADDLE_VALUE + PADDLE_WIDTH]
+X_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
+Y_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
 X_MIDDLE = X_CONSTRAINTS[1] // 2
 Y_MIDDLE = Y_CONSTRAINTS[1] // 2
 
@@ -71,8 +71,8 @@ class PUP_Game_State:
         self.reset()
 
     def reset(self):
-        self.paddle_pos1 = Y_MIDDLE - PADDLE_HALF
-        self.paddle_pos2 = Y_MIDDLE - PADDLE_HALF
+        self.paddle_pos1 = Y_MIDDLE
+        self.paddle_pos2 = Y_MIDDLE
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
         self.powerups = []
@@ -142,7 +142,7 @@ class PUP_Game_State:
         # Once the ball reaches the left side...
         if self.ball_pos[0] < X_CONSTRAINTS[0]:
             # Check if the ball hits player 1's paddle. If it does, update ball velocity. Otherwise, increase player 2's score and reset
-            if self.paddle_pos1 < self.ball_pos[1] < self.paddle_pos1 + PADDLE_WIDTH:
+            if self.paddle_pos1 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos1 + PADDLE_HALF:
                 self.update_ball_velocity(1)
             else:
                 self.player2_score += 1
@@ -151,7 +151,7 @@ class PUP_Game_State:
         # Once the ball reaches the right side...
         elif self.ball_pos[0] > X_CONSTRAINTS[1]:
             # Check if the ball hits player 2's paddle. If it does, update ball velocity. Otherwise, increase player 1's score and reset
-            if self.paddle_pos2 < self.ball_pos[1] < self.paddle_pos2 + PADDLE_WIDTH:
+            if self.paddle_pos2 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos2 + PADDLE_HALF:
                 self.update_ball_velocity(2)
             else:
                 self.player1_score += 1
