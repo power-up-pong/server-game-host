@@ -6,7 +6,7 @@ import math
 from time import sleep, time
 
 # Constants
-BROKER = 'mqtt.eclipseprojects.io'  # CS MQTT broker
+BROKER = 'mqtt.eclipseprojects.io'
 PORT = 1883
 QOS = 0
 USERNAME = 'cs326'  # broker username (if required)
@@ -52,13 +52,19 @@ class PowerUp:
             'owner': self.owner,
         }
 
+    def set_pos(self, pos):
+        self.pos = pos
+
+    def set_owner(self, owner):
+        self.owner = owner
+
 
 class PUP_Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
-        self.player1_connected = False
-        self.player2_connected = False
+        self.player1_connected = True
+        self.player2_connected = True
 
         self.client = mqtt.Client()
         self.client.username_pw_set(USERNAME, password=PASSWORD)
@@ -75,6 +81,7 @@ class PUP_Game_State:
         self.paddle_pos2 = Y_MIDDLE
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
+        self.last_hit = None
         self.powerups = []
         self.powerup_timer = time()
         self.publish_state()
@@ -96,6 +103,8 @@ class PUP_Game_State:
             if not self.player2_connected:
                 self.player2_connected = True
             self.paddle_pos2 = int(msg.payload)
+        elif msg.topic == "pup/button":
+            self.use_powerup(int(msg.payload))
 
     def get_state(self):
         powerup_dict = []
@@ -125,6 +134,13 @@ class PUP_Game_State:
     def generate_powerup(self):
         self.powerups.append(PowerUp())
 
+    def use_powerup(self, player_id):
+        for powerup in self.powerups:
+            if powerup.get_owner() == player_id:
+                # TODO: Add powerup effects
+                self.powerups.remove(powerup)
+                break
+
     def run_game_loop(self):
         while True:
             if self.player1_connected and self.player2_connected:
@@ -144,6 +160,7 @@ class PUP_Game_State:
             # Check if the ball hits player 1's paddle. If it does, update ball velocity. Otherwise, increase player 2's score and reset
             if self.paddle_pos1 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos1 + PADDLE_HALF:
                 self.update_ball_velocity(1)
+                self.last_hit = 1
             else:
                 self.player2_score += 1
                 self.reset()
@@ -153,9 +170,19 @@ class PUP_Game_State:
             # Check if the ball hits player 2's paddle. If it does, update ball velocity. Otherwise, increase player 1's score and reset
             if self.paddle_pos2 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos2 + PADDLE_HALF:
                 self.update_ball_velocity(2)
+                self.last_hit = 2
             else:
                 self.player1_score += 1
                 self.reset()
+
+        # Loop through powerups
+        for powerup in self.powerups:
+            powerup_pos = powerup.get_pos()
+            # If the ball hits an unclaimed powerup, give it to the player who last hit the ball
+            if powerup_pos is not None:
+                if powerup_pos[0] - POWERUP_RADIUS < self.ball_pos[0] < powerup_pos[0] + POWERUP_RADIUS and powerup_pos[1] - POWERUP_RADIUS < self.ball_pos[1] < powerup_pos[1] + POWERUP_RADIUS:
+                    powerup.set_owner(self.last_hit)
+                    powerup.set_pos(None)
 
         # Bounce the ball off the ceiling and floor
         if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
@@ -204,6 +231,7 @@ gs = PUP_Game_State()
 client = gs.get_client()
 client.subscribe("pup/ctrl1", qos=QOS)
 client.subscribe("pup/ctrl2", qos=QOS)
+client.subscribe("pup/button", qos=QOS)
 
 try:
     gs.run_game_loop()
