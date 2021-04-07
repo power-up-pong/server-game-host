@@ -40,6 +40,7 @@ class PUP_Game_State:
         self.client.connect(BROKER, PORT, 60)
         self.client.loop_start()
 
+        self.publish_props()
         self.reset()
 
     def reset(self):
@@ -78,6 +79,14 @@ class PUP_Game_State:
 
         print(json.dumps(game_state))
         return json.dumps(game_state)
+
+    def get_props(self):
+        game_props = {
+            'paddle_width': PADDLE_WIDTH,
+            'x_constraints': X_CONSTRAINTS,
+            'y_constraints': Y_CONSTRAINTS,
+        }
+        return json.dumps(game_props)
 
     def run_game_loop(self):
         while True:
@@ -138,6 +147,12 @@ class PUP_Game_State:
     def publish_state(self):
         (result, num) = self.client.publish(
             'pup/game', self.get_state(), qos=QOS)
+        if result != 0:
+            print('PUBLISH returned error:', result)
+
+    def publish_props(self):
+        (result, num) = self.client.publish(
+            'pup/game-props', self.get_props(), qos=QOS)
         if result != 0:
             print('PUBLISH returned error:', result)
 
