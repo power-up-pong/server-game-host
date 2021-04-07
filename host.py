@@ -3,7 +3,7 @@ import paho.mqtt.client as mqtt
 import random
 import json
 import math
-from time import sleep
+from time import sleep, time
 
 # Constants
 BROKER = 'mqtt.eclipseprojects.io'  # CS MQTT broker
@@ -18,12 +18,39 @@ GAME_CYCLE = 0.03
 TIME_AFTER_SCORE = 1
 MAX_BOUNCE_ANGLE = math.pi * 5 / 12
 BALL_SPEED = 20
+POWERUP_X_OFFSET = 50
+POWERUP_GENERATION_TIME = 5
+POWERUP_RADIUS = 10
 
 PADDLE_HALF = PADDLE_WIDTH // 2
 X_CONSTRAINTS = [0, MAX_PADDLE_VALUE + PADDLE_WIDTH]
 Y_CONSTRAINTS = [0, MAX_PADDLE_VALUE + PADDLE_WIDTH]
 X_MIDDLE = X_CONSTRAINTS[1] // 2
 Y_MIDDLE = Y_CONSTRAINTS[1] // 2
+
+
+class PowerUp:
+    def __init__(self):
+        self.pos = [random.randint(X_CONSTRAINTS[0] + POWERUP_X_OFFSET, X_CONSTRAINTS[1] - POWERUP_X_OFFSET),
+                    random.randint(Y_CONSTRAINTS[0], Y_CONSTRAINTS[1])]
+        self.type = random.choice(['paddleGrow', 'fastBall'])
+        self.owner = None
+
+    def get_pos(self):
+        return self.pos
+
+    def get_type(self):
+        return self.type
+
+    def get_owner(self):
+        return self.owner
+
+    def get_dict(self):
+        return {
+            'pos': self.pos,
+            'type': self.type,
+            'owner': self.owner,
+        }
 
 
 class PUP_Game_State:
@@ -44,10 +71,12 @@ class PUP_Game_State:
         self.reset()
 
     def reset(self):
-        self.paddle_pos1 = Y_MIDDLE
-        self.paddle_pos2 = Y_MIDDLE
+        self.paddle_pos1 = Y_MIDDLE - PADDLE_HALF
+        self.paddle_pos2 = Y_MIDDLE - PADDLE_HALF
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
+        self.powerups = []
+        self.powerup_timer = time()
         self.publish_state()
         sleep(TIME_AFTER_SCORE)
 
@@ -69,12 +98,16 @@ class PUP_Game_State:
             self.paddle_pos2 = int(msg.payload)
 
     def get_state(self):
+        powerup_dict = []
+        for powerup in self.powerups:
+            powerup_dict.append(powerup.get_dict())
         game_state = {
             'paddle1': self.paddle_pos1,
             'paddle2': self.paddle_pos2,
             'ball': self.ball_pos,
             'player1_score': self.player1_score,
-            'player2_score': self.player2_score
+            'player2_score': self.player2_score,
+            'powerups': powerup_dict,
         }
 
         print(json.dumps(game_state))
@@ -85,12 +118,19 @@ class PUP_Game_State:
             'paddle_width': PADDLE_WIDTH,
             'x_constraints': X_CONSTRAINTS,
             'y_constraints': Y_CONSTRAINTS,
+            'powerup_radius': POWERUP_RADIUS,
         }
         return json.dumps(game_props)
+
+    def generate_powerup(self):
+        self.powerups.append(PowerUp())
 
     def run_game_loop(self):
         while True:
             if self.player1_connected and self.player2_connected:
+                if time() - self.powerup_timer > POWERUP_GENERATION_TIME:
+                    self.generate_powerup()
+                    self.powerup_timer = time()
                 self.update_ball_pos()
                 self.publish_state()
             sleep(GAME_CYCLE)
