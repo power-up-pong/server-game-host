@@ -30,6 +30,8 @@ class PUP_Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
+        self.player1_connected = False
+        self.player2_connected = False
 
         self.client = mqtt.Client()
         self.client.username_pw_set(USERNAME, password=PASSWORD)
@@ -57,8 +59,12 @@ class PUP_Game_State:
 
     def on_message(self, client, data, msg):
         if msg.topic == "pup/ctrl1":
+            if not self.player1_connected:
+                self.player1_connected = True
             self.paddle_pos1 = int(msg.payload)
         elif msg.topic == "pup/ctrl2":
+            if not self.player2_connected:
+                self.player2_connected = True
             self.paddle_pos2 = int(msg.payload)
 
     def get_state(self):
@@ -75,8 +81,9 @@ class PUP_Game_State:
 
     def run_game_loop(self):
         while True:
-            self.update_ball_pos()
-            self.publish_state()
+            if self.player1_connected and self.player2_connected:
+                self.update_ball_pos()
+                self.publish_state()
             sleep(GAME_CYCLE)
 
     def update_ball_pos(self):
