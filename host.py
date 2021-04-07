@@ -12,17 +12,18 @@ QOS = 0
 USERNAME = 'cs326'  # broker username (if required)
 PASSWORD = 'piot'  # broker password (if required)
 
-PADDLE_WIDTH = 50
+INITIAL_PADDLE_WIDTH = 50
 MAX_PADDLE_VALUE = 1023
 GAME_CYCLE = 0.03
 TIME_AFTER_SCORE = 1
 MAX_BOUNCE_ANGLE = math.pi * 5 / 12
-BALL_SPEED = 20
+INITIAL_BALL_SPEED = 20
 POWERUP_X_OFFSET = 50
 POWERUP_GENERATION_TIME = 5
+POWERUP_EFFECT_TIME = 5
 POWERUP_RADIUS = 10
 
-PADDLE_HALF = PADDLE_WIDTH // 2
+PADDLE_HALF = INITIAL_PADDLE_WIDTH // 2
 X_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
 Y_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
 X_MIDDLE = X_CONSTRAINTS[1] // 2
@@ -35,6 +36,7 @@ class PowerUp:
                     random.randint(Y_CONSTRAINTS[0], Y_CONSTRAINTS[1])]
         self.type = random.choice(['paddleGrow', 'fastBall'])
         self.owner = None
+        self.time_used = None
 
     def get_pos(self):
         return self.pos
@@ -50,7 +52,11 @@ class PowerUp:
             'pos': self.pos,
             'type': self.type,
             'owner': self.owner,
+            'time_used': self.time_used,
         }
+
+    def get_time_used(self):
+        return self.time_used
 
     def set_pos(self, pos):
         self.pos = pos
@@ -58,13 +64,16 @@ class PowerUp:
     def set_owner(self, owner):
         self.owner = owner
 
+    def set_time_used(self, time):
+        self.time_used = time
+
 
 class PUP_Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
-        self.player1_connected = True
-        self.player2_connected = True
+        self.player1_connected = False
+        self.player2_connected = False
 
         self.client = mqtt.Client()
         self.client.username_pw_set(USERNAME, password=PASSWORD)
@@ -79,8 +88,11 @@ class PUP_Game_State:
     def reset(self):
         self.paddle_pos1 = Y_MIDDLE
         self.paddle_pos2 = Y_MIDDLE
+        self.paddle_width1 = INITIAL_PADDLE_WIDTH
+        self.paddle_width2 = INITIAL_PADDLE_WIDTH
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
-        self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
+        self.ball_speed = INITIAL_BALL_SPEED
+        self.ball_velocity = [INITIAL_BALL_SPEED * random.choice([-1, 1]), 0]
         self.last_hit = None
         self.powerups = []
         self.powerup_timer = time()
@@ -109,6 +121,10 @@ class PUP_Game_State:
     def get_state(self):
         powerup_dict = []
         for powerup in self.powerups:
+            powerup_time = powerup.get_time_used()
+            if powerup_time is not None:
+                if time.time() - powerup_time > POWERUP_EFFECT_TIME:
+                    self.stop_powerup(powerup)
             powerup_dict.append(powerup.get_dict())
         game_state = {
             'paddle1': self.paddle_pos1,
@@ -124,7 +140,7 @@ class PUP_Game_State:
 
     def get_props(self):
         game_props = {
-            'paddle_width': PADDLE_WIDTH,
+            'paddle_width': INITIAL_PADDLE_WIDTH,
             'x_constraints': X_CONSTRAINTS,
             'y_constraints': Y_CONSTRAINTS,
             'powerup_radius': POWERUP_RADIUS,
@@ -136,10 +152,31 @@ class PUP_Game_State:
 
     def use_powerup(self, player_id):
         for powerup in self.powerups:
-            if powerup.get_owner() == player_id:
-                # TODO: Add powerup effects
-                self.powerups.remove(powerup)
+            powerup_type = powerup.get_type()
+            powerup_owner = powerup.get_owner()
+            if powerup_owner == player_id:
+                if powerup_type == "paddleGrow":
+                    if powerup_owner == 1:
+                        self.paddle_width1 += INITIAL_PADDLE_WIDTH
+                    elif powerup_owner == 2:
+                        self.paddle_width2 += INITIAL_PADDLE_WIDTH
+                elif powerup_type == "fastBall":
+                    self.ball_speed += INITIAL_BALL_SPEED
+                    self.ball_velocity[0] += INITIAL_BALL_SPEED
                 break
+
+    def stop_powerup(self, powerup):
+        powerup_type = powerup.get_type()
+        powerup_owner = powerup.get_owner()
+        if powerup_type == "paddleGrow":
+            if powerup_owner == 1:
+                self.paddle_width1 -= INITIAL_PADDLE_WIDTH
+            elif powerup_owner == 2:
+                self.paddle_width2 -= INITIAL_PADDLE_WIDTH
+        elif powerup_type == "fastBall":
+            self.ball_speed -= INITIAL_BALL_SPEED
+            self.ball_velocity[0] -= INITIAL_BALL_SPEED
+        self.powerups.remove(powerup)
 
     def run_game_loop(self):
         while True:
@@ -158,7 +195,7 @@ class PUP_Game_State:
         # Once the ball reaches the left side...
         if self.ball_pos[0] < X_CONSTRAINTS[0]:
             # Check if the ball hits player 1's paddle. If it does, update ball velocity. Otherwise, increase player 2's score and reset
-            if self.paddle_pos1 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos1 + PADDLE_HALF:
+            if self.paddle_pos1 - self.paddle_width1 // 2 < self.ball_pos[1] < self.paddle_pos1 + self.paddle_width1 // 2:
                 self.update_ball_velocity(1)
                 self.last_hit = 1
             else:
@@ -168,7 +205,7 @@ class PUP_Game_State:
         # Once the ball reaches the right side...
         elif self.ball_pos[0] > X_CONSTRAINTS[1]:
             # Check if the ball hits player 2's paddle. If it does, update ball velocity. Otherwise, increase player 1's score and reset
-            if self.paddle_pos2 - PADDLE_HALF < self.ball_pos[1] < self.paddle_pos2 + PADDLE_HALF:
+            if self.paddle_pos2 - self.paddle_width2 // 2 < self.ball_pos[1] < self.paddle_pos2 + self.paddle_width2 // 2:
                 self.update_ball_velocity(2)
                 self.last_hit = 2
             else:
@@ -186,26 +223,32 @@ class PUP_Game_State:
 
         # Bounce the ball off the ceiling and floor
         if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
-            self.ball_velocity[1] = -self.ball_velocity[1]
+            self.ball_velocity[1] = -1 * self.ball_velocity[1]
 
     # https://gamedev.stackexchange.com/questions/4253/in-pong-how-do-you-calculate-the-balls-direction-when-it-bounces-off-the-paddl
     def update_ball_velocity(self, paddle_num):
-        # Select which paddle to evaluate and reset the ball position so it's not off the screen
+        # Select which paddle and paddle_width to evaluate and reset the ball position so it's not off the screen
         paddle_pos = 0
+        paddle_width = 0
         if paddle_num == 1:
             paddle_pos = self.paddle_pos1
+            paddle_width = self.paddle_width1
             self.ball_pos[0] = X_CONSTRAINTS[0]
         else:
             paddle_pos = self.paddle_pos2
+            paddle_width = self.paddle_width2
             self.ball_pos[0] = X_CONSTRAINTS[1]
 
         # Calculate the angle and update the velocity
         relative_intersectY = paddle_pos - self.ball_pos[1]
-        normalized_relative_intersectY = (relative_intersectY / (PADDLE_HALF))
+        normalized_relative_intersectY = (
+            relative_intersectY / (paddle_width // 2))
         bounce_angle = normalized_relative_intersectY * MAX_BOUNCE_ANGLE
         prior_velocityX = self.ball_velocity[0]
-        self.ball_velocity[0] = int(BALL_SPEED * math.cos(bounce_angle))
-        self.ball_velocity[1] = int(BALL_SPEED * -math.sin(bounce_angle))
+        self.ball_velocity[0] = int(
+            self.ball_speed * math.cos(bounce_angle))
+        self.ball_velocity[1] = int(
+            self.ball_speed * -math.sin(bounce_angle))
 
         # Switch the direction if the sign is wrong
         if (prior_velocityX < 0 and self.ball_velocity[0] < 0) or (prior_velocityX > 0 and self.ball_velocity[0] > 0):
