@@ -6,7 +6,7 @@ import math
 from time import sleep
 
 # Constants
-BROKER = 'test.mosquitto.org'  # CS MQTT broker
+BROKER = 'mqtt.eclipseprojects.io'  # CS MQTT broker
 PORT = 1883
 QOS = 0
 USERNAME = 'cs326'  # broker username (if required)
