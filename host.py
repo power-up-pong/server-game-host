@@ -43,6 +43,7 @@ class PowerUp:
         self.type = random.choice(['paddleGrow', 'fastBall'])
         self.owner = None
         self.time_used = None
+        self.used = False
 
     def get_pos(self):
         return self.pos
@@ -72,6 +73,12 @@ class PowerUp:
 
     def set_time_used(self, time):
         self.time_used = time
+
+    def set_used(self):
+        self.used = not self.used
+
+    def is_used(self):
+        return self.used
 
 
 class PUP_Game_State:
@@ -129,7 +136,7 @@ class PUP_Game_State:
         for powerup in self.powerups:
             powerup_time = powerup.get_time_used()
             if powerup_time is not None:
-                if time.time() - powerup_time > POWERUP_EFFECT_TIME:
+                if time() - powerup_time > POWERUP_EFFECT_TIME:
                     self.stop_powerup(powerup)
             powerup_dict.append(powerup.get_dict())
         game_state = {
@@ -161,7 +168,9 @@ class PUP_Game_State:
         for powerup in self.powerups:
             powerup_type = powerup.get_type()
             powerup_owner = powerup.get_owner()
-            if powerup_owner == player_id:
+            if powerup_owner == player_id and not powerup.is_used():
+                powerup.set_used()
+                powerup.set_time_used(time())
                 if powerup_type == "paddleGrow":
                     if powerup_owner == 1:
                         self.paddle_width1 += INITIAL_PADDLE_WIDTH
