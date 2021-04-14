@@ -12,16 +12,22 @@ QOS = 0
 USERNAME = 'cs326'  # broker username (if required)
 PASSWORD = 'piot'  # broker password (if required)
 
-INITIAL_PADDLE_WIDTH = 50
+GAME_STATE_TOPIC = 'pup/game'
+GAME_PROPS_TOPIC = 'pup/game-props'
+CTRL1_TOPIC = "pup/ctrl1"
+CTRL2_TOPIC = "pup/ctrl2"
+BUTTON_TOPIC = "pup/button"
+
+INITIAL_PADDLE_WIDTH = 200
 MAX_PADDLE_VALUE = 1023
 GAME_CYCLE = 0.03
 TIME_AFTER_SCORE = 1
 MAX_BOUNCE_ANGLE = math.pi * 5 / 12
 INITIAL_BALL_SPEED = 20
-POWERUP_X_OFFSET = 50
-POWERUP_GENERATION_TIME = 5
+POWERUP_X_OFFSET = 200
+POWERUP_GENERATION_TIME = 2
 POWERUP_EFFECT_TIME = 5
-POWERUP_RADIUS = 10
+POWERUP_RADIUS = 20
 
 PADDLE_HALF = INITIAL_PADDLE_WIDTH // 2
 X_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
@@ -74,6 +80,8 @@ class PUP_Game_State:
         self.player2_score = 0
         self.player1_connected = False
         self.player2_connected = False
+        self.paddle_pos1 = Y_MIDDLE
+        self.paddle_pos2 = Y_MIDDLE
 
         self.client = mqtt.Client()
         self.client.username_pw_set(USERNAME, password=PASSWORD)
@@ -86,8 +94,6 @@ class PUP_Game_State:
         self.reset()
 
     def reset(self):
-        self.paddle_pos1 = Y_MIDDLE
-        self.paddle_pos2 = Y_MIDDLE
         self.paddle_width1 = INITIAL_PADDLE_WIDTH
         self.paddle_width2 = INITIAL_PADDLE_WIDTH
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
@@ -107,15 +113,15 @@ class PUP_Game_State:
             os._exit(1)
 
     def on_message(self, client, data, msg):
-        if msg.topic == "pup/ctrl1":
+        if msg.topic == CTRL1_TOPIC:
             if not self.player1_connected:
                 self.player1_connected = True
             self.paddle_pos1 = int(msg.payload)
-        elif msg.topic == "pup/ctrl2":
+        elif msg.topic == CTRL2_TOPIC:
             if not self.player2_connected:
                 self.player2_connected = True
             self.paddle_pos2 = int(msg.payload)
-        elif msg.topic == "pup/button":
+        elif msg.topic == BUTTON_TOPIC:
             self.use_powerup(int(msg.payload))
 
     def get_state(self):
@@ -129,18 +135,19 @@ class PUP_Game_State:
         game_state = {
             'paddle1': self.paddle_pos1,
             'paddle2': self.paddle_pos2,
+            'paddle1_width': self.paddle_width1,
+            'paddle2_width': self.paddle_width2,
             'ball': self.ball_pos,
             'player1_score': self.player1_score,
             'player2_score': self.player2_score,
             'powerups': powerup_dict,
         }
 
-        print(json.dumps(game_state))
+        # print(json.dumps(game_state))
         return json.dumps(game_state)
 
     def get_props(self):
         game_props = {
-            'paddle_width': INITIAL_PADDLE_WIDTH,
             'x_constraints': X_CONSTRAINTS,
             'y_constraints': Y_CONSTRAINTS,
             'powerup_radius': POWERUP_RADIUS,
@@ -161,8 +168,8 @@ class PUP_Game_State:
                     elif powerup_owner == 2:
                         self.paddle_width2 += INITIAL_PADDLE_WIDTH
                 elif powerup_type == "fastBall":
-                    self.ball_speed += INITIAL_BALL_SPEED
-                    self.ball_velocity[0] += INITIAL_BALL_SPEED
+                    self.ball_velocity[0] *= 1.2
+                    self.ball_velocity[1] *= 1.2
                 break
 
     def stop_powerup(self, powerup):
@@ -173,9 +180,9 @@ class PUP_Game_State:
                 self.paddle_width1 -= INITIAL_PADDLE_WIDTH
             elif powerup_owner == 2:
                 self.paddle_width2 -= INITIAL_PADDLE_WIDTH
-        elif powerup_type == "fastBall":
-            self.ball_speed -= INITIAL_BALL_SPEED
-            self.ball_velocity[0] -= INITIAL_BALL_SPEED
+        # elif powerup_type == "fastBall":
+        #     self.ball_velocity[0] /= INITIAL_BALL_SPEED
+        #     self.ball_velocity[1] /= INITIAL_BALL_SPEED
         self.powerups.remove(powerup)
 
     def run_game_loop(self):
@@ -256,13 +263,13 @@ class PUP_Game_State:
 
     def publish_state(self):
         (result, num) = self.client.publish(
-            'pup/game', self.get_state(), qos=QOS)
+            GAME_STATE_TOPIC, self.get_state(), qos=QOS)
         if result != 0:
             print('PUBLISH returned error:', result)
 
     def publish_props(self):
         (result, num) = self.client.publish(
-            'pup/game-props', self.get_props(), qos=QOS)
+            GAME_PROPS_TOPIC, self.get_props(), qos=QOS)
         if result != 0:
             print('PUBLISH returned error:', result)
 
@@ -272,9 +279,9 @@ class PUP_Game_State:
 
 gs = PUP_Game_State()
 client = gs.get_client()
-client.subscribe("pup/ctrl1", qos=QOS)
-client.subscribe("pup/ctrl2", qos=QOS)
-client.subscribe("pup/button", qos=QOS)
+client.subscribe(CTRL1_TOPIC, qos=QOS)
+client.subscribe(CTRL2_TOPIC, qos=QOS)
+client.subscribe(BUTTON_TOPIC, qos=QOS)
 
 try:
     gs.run_game_loop()
