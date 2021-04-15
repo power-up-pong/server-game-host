@@ -101,8 +101,6 @@ class PUP_Game_State:
         self.reset()
 
     def reset(self):
-        self.paddle_width1 = INITIAL_PADDLE_WIDTH
-        self.paddle_width2 = INITIAL_PADDLE_WIDTH
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_speed = INITIAL_BALL_SPEED
         self.ball_velocity = [INITIAL_BALL_SPEED * random.choice([-1, 1]), 0]
@@ -134,10 +132,7 @@ class PUP_Game_State:
     def get_state(self):
         powerup_dict = []
         for powerup in self.powerups:
-            powerup_time = powerup.get_time_used()
-            if powerup_time is not None:
-                if time() - powerup_time > POWERUP_EFFECT_TIME:
-                    self.stop_powerup(powerup)
+            self.check_powerup_time(powerup)
             powerup_dict.append(powerup.get_dict())
         game_state = {
             'paddle1': self.paddle_pos1,
@@ -150,7 +145,7 @@ class PUP_Game_State:
             'powerups': powerup_dict,
         }
 
-        # print(json.dumps(game_state))
+        print(json.dumps(game_state))
         return json.dumps(game_state)
 
     def get_props(self):
@@ -163,6 +158,12 @@ class PUP_Game_State:
 
     def generate_powerup(self):
         self.powerups.append(PowerUp())
+
+    def check_powerup_time(self, powerup):
+        powerup_time = powerup.get_time_used()
+        if powerup_time is not None:
+            if time() - powerup_time > POWERUP_EFFECT_TIME:
+                self.stop_powerup(powerup)
 
     def use_powerup(self, player_id):
         for powerup in self.powerups:
@@ -189,9 +190,6 @@ class PUP_Game_State:
                 self.paddle_width1 -= INITIAL_PADDLE_WIDTH
             elif powerup_owner == 2:
                 self.paddle_width2 -= INITIAL_PADDLE_WIDTH
-        # elif powerup_type == "fastBall":
-        #     self.ball_velocity[0] /= INITIAL_BALL_SPEED
-        #     self.ball_velocity[1] /= INITIAL_BALL_SPEED
         self.powerups.remove(powerup)
 
     def run_game_loop(self):
