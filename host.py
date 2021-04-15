@@ -85,8 +85,8 @@ class PUP_Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
-        self.player1_connected = False
-        self.player2_connected = False
+        self.player1_connected = True
+        self.player2_connected = True
         self.paddle_pos1 = Y_MIDDLE
         self.paddle_pos2 = Y_MIDDLE
 
@@ -101,6 +101,8 @@ class PUP_Game_State:
         self.reset()
 
     def reset(self):
+        self.paddle_width1 = INITIAL_PADDLE_WIDTH
+        self.paddle_width2 = INITIAL_PADDLE_WIDTH
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_speed = INITIAL_BALL_SPEED
         self.ball_velocity = [INITIAL_BALL_SPEED * random.choice([-1, 1]), 0]
@@ -237,7 +239,7 @@ class PUP_Game_State:
 
         # Bounce the ball off the ceiling and floor
         if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
-            self.ball_velocity[1] = -1 * self.ball_velocity[1]
+            self.ball_velocity[1] *= -1
 
     # https://gamedev.stackexchange.com/questions/4253/in-pong-how-do-you-calculate-the-balls-direction-when-it-bounces-off-the-paddl
     def update_ball_velocity(self, paddle_num):
