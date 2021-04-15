@@ -23,7 +23,7 @@ MAX_PADDLE_VALUE = 1023
 GAME_CYCLE = 0.03
 TIME_AFTER_SCORE = 1
 MAX_BOUNCE_ANGLE = math.pi * 5 / 12
-INITIAL_BALL_SPEED = 20
+BALL_SPEED = 20
 POWERUP_X_OFFSET = 200
 POWERUP_GENERATION_TIME = 2
 POWERUP_EFFECT_TIME = 5
@@ -86,8 +86,8 @@ class PUP_Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
-        self.player1_connected = True
-        self.player2_connected = True
+        self.player1_connected = False
+        self.player2_connected = False
         self.paddle_pos1 = Y_MIDDLE
         self.paddle_pos2 = Y_MIDDLE
 
@@ -105,8 +105,7 @@ class PUP_Game_State:
         self.paddle_width1 = INITIAL_PADDLE_WIDTH
         self.paddle_width2 = INITIAL_PADDLE_WIDTH
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
-        self.ball_speed = INITIAL_BALL_SPEED
-        self.ball_velocity = [INITIAL_BALL_SPEED * random.choice([-1, 1]), 0]
+        self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
         self.last_hit = None
         self.powerups = []
         self.powerup_timer = time()
@@ -263,9 +262,9 @@ class PUP_Game_State:
         bounce_angle = normalized_relative_intersectY * MAX_BOUNCE_ANGLE
         prior_velocityX = self.ball_velocity[0]
         self.ball_velocity[0] = int(
-            self.ball_speed * math.cos(bounce_angle))
+            BALL_SPEED * math.cos(bounce_angle))
         self.ball_velocity[1] = int(
-            self.ball_speed * -math.sin(bounce_angle))
+            BALL_SPEED * -math.sin(bounce_angle))
 
         # Switch the direction if the sign is wrong
         if (prior_velocityX < 0 and self.ball_velocity[0] < 0) or (prior_velocityX > 0 and self.ball_velocity[0] > 0):
