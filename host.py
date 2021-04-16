@@ -41,10 +41,9 @@ class PowerUp:
     def __init__(self):
         self.pos = [random.randint(X_CONSTRAINTS[0] + POWERUP_X_OFFSET, X_CONSTRAINTS[1] - POWERUP_X_OFFSET),
                     random.randint(Y_CONSTRAINTS[0], Y_CONSTRAINTS[1])]
-        self.type = random.choice(['paddleGrow', 'fastBall'])
+        self.type = random.choice(['paddleGrow', 'fastBall', 'trackBall'])
         self.owner = None
         self.time_used = None
-        self.used = False
 
     def get_pos(self):
         return self.pos
@@ -75,21 +74,17 @@ class PowerUp:
     def set_time_used(self, time):
         self.time_used = time
 
-    def set_used(self):
-        self.used = not self.used
-
-    def is_used(self):
-        return self.used
-
 
 class PUP_Game_State:
     def __init__(self):
         self.player1_score = 0
         self.player2_score = 0
-        self.player1_connected = False
-        self.player2_connected = False
+        self.player1_connected = True
+        self.player2_connected = True
         self.paddle_pos1 = Y_MIDDLE
         self.paddle_pos2 = Y_MIDDLE
+        self.player1_should_track = False
+        self.player2_should_track = False
 
         self.client = mqtt.Client()
         self.client.username_pw_set(USERNAME, password=PASSWORD)
@@ -123,11 +118,13 @@ class PUP_Game_State:
         if msg.topic == CTRL1_TOPIC:
             if not self.player1_connected:
                 self.player1_connected = True
-            self.paddle_pos1 = int(msg.payload)
+            if not self.player1_should_track:
+                self.paddle_pos1 = int(msg.payload)
         elif msg.topic == CTRL2_TOPIC:
             if not self.player2_connected:
                 self.player2_connected = True
-            self.paddle_pos2 = int(msg.payload)
+            if not self.player2_should_track:
+                self.paddle_pos2 = int(msg.payload)
         elif msg.topic == BUTTON_TOPIC:
             self.use_powerup(int(msg.payload))
 
@@ -171,8 +168,7 @@ class PUP_Game_State:
         for powerup in self.powerups:
             powerup_type = powerup.get_type()
             powerup_owner = powerup.get_owner()
-            if powerup_owner == player_id and not powerup.is_used():
-                powerup.set_used()
+            if powerup_owner == player_id and powerup.get_time_used() is None:
                 powerup.set_time_used(time())
                 if powerup_type == "paddleGrow":
                     if powerup_owner == 1:
@@ -182,6 +178,11 @@ class PUP_Game_State:
                 elif powerup_type == "fastBall":
                     self.ball_velocity[0] *= FASTBALL_SPEED_MULTIPLIER
                     self.ball_velocity[1] *= FASTBALL_SPEED_MULTIPLIER
+                elif powerup_type == "trackBall":
+                    if powerup_owner == 1:
+                        self.player1_should_track = True
+                    elif powerup_owner == 2:
+                        self.paddle2_should_track = True
                 break
 
     def stop_powerup(self, powerup):
@@ -192,6 +193,11 @@ class PUP_Game_State:
                 self.paddle_width1 -= INITIAL_PADDLE_WIDTH
             elif powerup_owner == 2:
                 self.paddle_width2 -= INITIAL_PADDLE_WIDTH
+        elif powerup_type == "trackBall":
+            if powerup_owner == 1:
+                self.player1_should_track = False
+            elif powerup_owner == 2:
+                self.paddle2_should_track = False
         self.powerups.remove(powerup)
 
     def run_game_loop(self):
@@ -207,6 +213,12 @@ class PUP_Game_State:
     def update_ball_pos(self):
         self.ball_pos[0] += self.ball_velocity[0]
         self.ball_pos[1] += self.ball_velocity[1]
+
+        # Set paddle position to ball position if trackBall powerup is activated
+        if self.player1_should_track:
+            self.paddle_pos1 = self.ball_pos[1]
+        if self.player2_should_track:
+            self.paddle_pos2 = self.ball_pos[1]
 
         # Once the ball reaches the left side...
         if self.ball_pos[0] < X_CONSTRAINTS[0]:
