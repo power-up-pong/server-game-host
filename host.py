@@ -1,3 +1,10 @@
+'''
+host.py hosts a Power-Up Pong game for two players. It handles all of the
+game state such as paddle positions, ball positions, hits, misses, powerups, etc.
+Written by Jon Ellis, Charlie Kornoelje, and Ryan Vreeke
+for CS 326 Final Project at Calvin University, April 2021
+'''
+
 import os
 import paho.mqtt.client as mqtt
 import random
@@ -6,7 +13,7 @@ import math
 from time import sleep, time
 
 # Constants
-BROKER = 'mqtt.eclipseprojects.io'
+BROKER = 'iot.cs.calvin.edu'
 PORT = 1883
 QOS = 0
 USERNAME = 'cs326'  # broker username (if required)
@@ -75,16 +82,89 @@ class PowerUp:
         self.time_used = time
 
 
+class PUP_Player_State:
+    def __init__(self, id):
+        self.id = id
+        self.score = 0
+        self.connected = False
+        self.paddle_pos = Y_MIDDLE
+        self.paddle_width = INITIAL_PADDLE_WIDTH
+        self.paddle_should_track = False
+        self.powerups = []
+
+    def get_id(self):
+        return self.id
+
+    def get_score(self):
+        return self.score
+
+    def is_connected(self):
+        return self.connected
+
+    def get_paddle_pos(self):
+        return self.paddle_pos
+
+    def get_paddle_width(self):
+        return self.paddle_width
+
+    def get_paddle_should_track(self):
+        return self.paddle_should_track
+
+    def get_powerups(self):
+        return self.powerups
+
+    def set_score(self, score):
+        self.score = score
+
+    def set_connected(self, connected):
+        self.connected = connected
+
+    def set_paddle_pos(self, pos):
+        self.paddle_pos = pos
+
+    def set_paddle_width(self, width):
+        self.paddle_width = width
+
+    def set_paddle_should_track(self, track):
+        self.paddle_should_track = track
+
+    def clear_powerups(self):
+        self.powerups = []
+
+    def add_powerup(self, powerup):
+        self.powerups.append(powerup)
+
+    def pop_powerup(self):
+        return self.powerups.pop(0)
+
+    def get_dict(self):
+        powerup_dict = []
+        for powerup in self.powerups:
+            powerup_dict.append(powerup.get_dict())
+        return {
+            'id': self.id,
+            'score': self.score,
+            'paddle_pos': self.paddle_pos,
+            'paddle_width': self.paddle_width,
+            'powerups': powerup_dict
+        }
+
+    # If the top powerup of the queue has been used and its effect time has expired, remove and return it
+    def get_expired_powerup(self):
+        if len(self.powerups) > 0:
+            powerup_time = self.powerups[0].get_time_used()
+            if powerup_time is not None:
+                if time() - powerup_time > POWERUP_EFFECT_TIME:
+                    return self.pop_powerup()
+        return None
+
+    def increment_score(self):
+        self.score += 1
+
+
 class PUP_Game_State:
     def __init__(self):
-        self.player1_score = 0
-        self.player2_score = 0
-        self.player1_connected = False
-        self.player2_connected = False
-        self.paddle_pos1 = Y_MIDDLE
-        self.paddle_pos2 = Y_MIDDLE
-        # self.paddle1_should_track = False
-        # self.paddle2_should_track = False
+        self.players = (PUP_Player_State(1), PUP_Player_State(2))
         self.track_offset = self.generate_track_offset()
 
         self.client = mqtt.Client()
@@ -98,16 +178,15 @@ class PUP_Game_State:
         self.reset()
 
     def reset(self):
-        self.paddle_width1 = INITIAL_PADDLE_WIDTH
-        self.paddle_width2 = INITIAL_PADDLE_WIDTH
-        self.paddle1_should_track = False
-        self.paddle2_should_track = False
+        for player in self.players:
+            player.set_paddle_width(INITIAL_PADDLE_WIDTH)
+            player.set_paddle_should_track(False)
+            player.clear_powerups()
+
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
         self.ball_velocity = [BALL_SPEED * random.choice([-1, 1]), 0]
         self.last_hit = None
         self.powerups = []
-        self.powerups1 = []
-        self.powerups2 = []
         self.powerup_timer = time()
         self.publish_state()
         sleep(TIME_AFTER_SCORE)
@@ -121,46 +200,36 @@ class PUP_Game_State:
 
     def on_message(self, client, data, msg):
         if msg.topic == CTRL1_TOPIC:
-            if not self.player1_connected:
-                self.player1_connected = True
-            if not self.paddle1_should_track:
-                self.paddle_pos1 = int(msg.payload)
+            self.handle_paddle_move(1, int(msg.payload))
         elif msg.topic == CTRL2_TOPIC:
-            if not self.player2_connected:
-                self.player2_connected = True
-            if not self.paddle2_should_track:
-                self.paddle_pos2 = int(msg.payload)
+            self.handle_paddle_move(2, int(msg.payload))
         elif msg.topic == BUTTON_TOPIC:
             self.use_powerup(int(msg.payload))
 
+    def handle_paddle_move(self, player_id, new_pos):
+        for player in self.players:
+            if player.get_id() == player_id:
+                if not player.is_connected():
+                    player.set_connected(True)
+                if not player.get_paddle_should_track():
+                    player.set_paddle_pos(new_pos)
+
     def get_state(self):
+        players_dict = []
         powerup_dict = []
-        powerup1_dict = []
-        powerup2_dict = []
+        for player in self.players:
+            players_dict.append(player.get_dict())
         for powerup in self.powerups:
-            # self.check_powerup_time(powerup)
             powerup_dict.append(powerup.get_dict())
-        for powerup in self.powerups1:
-            self.check_powerup_time(powerup)
-            powerup1_dict.append(powerup.get_dict())
-        for powerup in self.powerups2:
-            self.check_powerup_time(powerup)
-            powerup2_dict.append(powerup.get_dict())
         game_state = {
-            'paddle1': self.paddle_pos1,
-            'paddle2': self.paddle_pos2,
-            'paddle1_width': self.paddle_width1,
-            'paddle2_width': self.paddle_width2,
+            'players': players_dict,
             'ball': self.ball_pos,
-            'player1_score': self.player1_score,
-            'player2_score': self.player2_score,
             'powerups': powerup_dict,
-            'powerups1': powerup1_dict,
-            'powerups2': powerup2_dict
         }
 
-        print(json.dumps(game_state))
-        return json.dumps(game_state)
+        game_state_json = json.dumps(game_state)
+        print(game_state_json)
+        return game_state_json
 
     def get_props(self):
         game_props = {
@@ -173,159 +242,117 @@ class PUP_Game_State:
     def generate_powerup(self):
         self.powerups.append(PowerUp())
 
-    def check_powerup_time(self, powerup):
-        powerup_time = powerup.get_time_used()
-        if powerup_time is not None:
-            if time() - powerup_time > POWERUP_EFFECT_TIME:
-                self.stop_powerup(powerup)
-
     def use_powerup(self, player_id):
-        if(player_id == 1):
-            for powerup in self.powerups1:
-                powerup_type = powerup.get_type()
-                if powerup.get_time_used() is None:
-                    powerup.set_time_used(time())
-                    if powerup_type == "paddleGrow":
-                        self.paddle_width1 += INITIAL_PADDLE_WIDTH
-                    elif powerup_type == "fastBall":
-                        self.ball_velocity[0] *= FASTBALL_SPEED_MULTIPLIER
-                        self.ball_velocity[1] *= FASTBALL_SPEED_MULTIPLIER
-                    elif powerup_type == "trackBall":
-                        self.paddle1_should_track = True
-                    break
-
-        else:
-            for powerup in self.powerups2:
-                powerup_type = powerup.get_type()
-                if powerup.get_time_used() is None:
-                    powerup.set_time_used(time())
-                    if powerup_type == "paddleGrow":
-                        self.paddle_width2 += INITIAL_PADDLE_WIDTH
-                    elif powerup_type == "fastBall":
-                        self.ball_velocity[0] *= FASTBALL_SPEED_MULTIPLIER
-                        self.ball_velocity[1] *= FASTBALL_SPEED_MULTIPLIER
-                    elif powerup_type == "trackBall":
-                        self.paddle2_should_track = True
-                    break
-        # for powerup in self.powerups:
-        #     powerup_type = powerup.get_type()
-        #     powerup_owner = powerup.get_owner()
-        #     if powerup_owner == player_id and powerup.get_time_used() is None:
-        #         powerup.set_time_used(time())
-        #         if powerup_type == "paddleGrow":
-        #             if powerup_owner == 1:
-        #                 self.paddle_width1 += INITIAL_PADDLE_WIDTH
-        #             elif powerup_owner == 2:
-        #                 self.paddle_width2 += INITIAL_PADDLE_WIDTH
-        #         elif powerup_type == "fastBall":
-        #             self.ball_velocity[0] *= FASTBALL_SPEED_MULTIPLIER
-        #             self.ball_velocity[1] *= FASTBALL_SPEED_MULTIPLIER
-        #         elif powerup_type == "trackBall":
-        #             if powerup_owner == 1:
-        #                 self.paddle1_should_track = True
-        #             elif powerup_owner == 2:
-        #                 self.paddle2_should_track = True
-        #         break
+        for player in self.players:
+            if player_id == player.get_id():
+                # Loop through the player's powerups and find the first in the queue which is not used
+                for powerup in player.get_powerups():
+                    powerup_type = powerup.get_type()
+                    if powerup.get_time_used() is None:
+                        # Once found, use the powerup effect
+                        powerup.set_time_used(time())
+                        if powerup_type == "paddleGrow":
+                            player.set_paddle_width(
+                                player.get_paddle_width() + INITIAL_PADDLE_WIDTH)
+                        elif powerup_type == "fastBall":
+                            self.ball_velocity[0] *= FASTBALL_SPEED_MULTIPLIER
+                            self.ball_velocity[1] *= FASTBALL_SPEED_MULTIPLIER
+                        elif powerup_type == "trackBall":
+                            self.paddle1_should_track = True
+                        break
 
     def stop_powerup(self, powerup):
         powerup_type = powerup.get_type()
         powerup_owner = powerup.get_owner()
-        if powerup_type == "paddleGrow":
-            if powerup_owner == 1:
-                self.paddle_width1 -= INITIAL_PADDLE_WIDTH
-                self.powerups1.pop(0)
-            elif powerup_owner == 2:
-                self.paddle_width2 -= INITIAL_PADDLE_WIDTH
-                self.powerups2.pop(0)
-        elif powerup_type == "trackBall":
-            if powerup_owner == 1:
-                self.paddle1_should_track = False
-                self.powerups1.pop(0)
-            elif powerup_owner == 2:
-                self.paddle2_should_track = False
-                self.powerups2.pop(0)
-        elif powerup_type == "fastBall":
-            if powerup_owner == 1:
-                self.powerups1.pop(0)
-            elif powerup_owner == 2:
-                self.powerups2.pop(0)
-        # self.powerups.remove(powerup)
+        # Find which player owns the powerup and remove the effect
+        for player in self.players:
+            player_id = player.get_id()
+            if powerup_owner == player_id:
+                if powerup_type == "paddleGrow":
+                    player.set_paddle_width(
+                        player.get_paddle_width() - INITIAL_PADDLE_WIDTH)
+                elif powerup_type == "trackBall":
+                    player.set_paddle_should_track(False)
 
     def run_game_loop(self):
         while True:
-            if self.player1_connected and self.player2_connected:
-                if time() - self.powerup_timer > POWERUP_GENERATION_TIME:
-                    self.generate_powerup()
-                    self.powerup_timer = time()
+            # if both players are connected
+            if all([player.is_connected() for player in self.players]):
+                self.handle_powerups()
                 self.update_ball_pos()
                 self.publish_state()
             sleep(GAME_CYCLE)
+
+    def handle_powerups(self):
+        if time() - self.powerup_timer > POWERUP_GENERATION_TIME:
+            self.generate_powerup()
+            self.powerup_timer = time()
+        self.handle_expired_powerups()
+
+    def handle_expired_powerups(self):
+        for player in self.players:
+            expired_powerup = player.get_expired_powerup()
+            if expired_powerup is not None:
+                self.stop_powerup(expired_powerup)
 
     def update_ball_pos(self):
         self.ball_pos[0] += self.ball_velocity[0]
         self.ball_pos[1] += self.ball_velocity[1]
 
-        # Set paddle position to ball position if trackBall powerup is activated
-        if self.paddle1_should_track:
-            self.paddle_pos1 = self.ball_pos[1] + self.track_offset
-        if self.paddle2_should_track:
-            self.paddle_pos2 = self.ball_pos[1] + self.track_offset
+        for player in self.players:
+            # Set paddle position to ball position (plus an offset) if trackBall powerup is activated
+            if player.get_paddle_should_track():
+                player.set_paddle_pos(self.ball_pos[1] + self.track_offset)
 
-        # Once the ball reaches the left side...
-        if self.ball_pos[0] < X_CONSTRAINTS[0]:
-            # Check if the ball hits player 1's paddle. If it does, update ball velocity. Otherwise, increase player 2's score and reset
-            if self.paddle_pos1 - self.paddle_width1 // 2 < self.ball_pos[1] < self.paddle_pos1 + self.paddle_width1 // 2:
-                self.update_ball_velocity(1)
-                self.last_hit = 1
+            player_id = player.get_id()
+            paddle_pos = player.get_paddle_pos()
+            paddle_width = player.get_paddle_width()
+            paddle_top = paddle_pos + paddle_width // 2
+            paddle_bottom = paddle_pos - paddle_width // 2
+
+            self.handle_paddle_ball_bounce(
+                player_id, paddle_bottom, paddle_top)
+
+            self.check_powerup_hits(player)
+
+        # Bounce the ball off the ceiling and floor
+        if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
+            self.ball_velocity[1] *= -1
+
+    def handle_paddle_ball_bounce(self, player_id, paddle_bottom, paddle_top):
+        # Once the ball reaches the player's side of the screen...
+        if (player_id == 1 and self.ball_pos[0] < X_CONSTRAINTS[0]) or (player_id == 2 and self.ball_pos[0] > X_CONSTRAINTS[1]):
+            # Check if the ball hits a player's paddle. If it does, update ball velocity. Otherwise, increase the other player's score and reset
+            if paddle_bottom < self.ball_pos[1] < paddle_top:
+                self.update_ball_velocity(player_id)
+                self.last_hit = player_id
                 self.track_offset = self.generate_track_offset()
             else:
-                self.player2_score += 1
+                self.increment_other_score(player_id)
                 self.reset()
 
-        # Once the ball reaches the right side...
-        elif self.ball_pos[0] > X_CONSTRAINTS[1]:
-            # Check if the ball hits player 2's paddle. If it does, update ball velocity. Otherwise, increase player 1's score and reset
-            if self.paddle_pos2 - self.paddle_width2 // 2 < self.ball_pos[1] < self.paddle_pos2 + self.paddle_width2 // 2:
-                self.update_ball_velocity(2)
-                self.last_hit = 2
-                self.track_offset = self.generate_track_offset()
-            else:
-                self.player1_score += 1
-                self.reset()
-
+    def check_powerup_hits(self, player):
         # Loop through powerups
         for powerup in self.powerups:
             powerup_pos = powerup.get_pos()
             # If the ball hits an unclaimed powerup, give it to the player who last hit the ball
             if powerup_pos is not None:
                 if powerup_pos[0] - POWERUP_RADIUS < self.ball_pos[0] < powerup_pos[0] + POWERUP_RADIUS and powerup_pos[1] - POWERUP_RADIUS < self.ball_pos[1] < powerup_pos[1] + POWERUP_RADIUS:
-                    # powerup.set_owner(self.last_hit)
-                    if(self.last_hit == 1):
+                    if self.last_hit == player.get_id():
                         powerup.set_owner(self.last_hit)
-                        self.powerups1.append(powerup)
-                    else:
-                        powerup.set_owner(self.last_hit)
-                        self.powerups2.append(powerup)
-                    powerup.set_pos(None)
-                # self.powerups.remove(powerup)
-
-        # Bounce the ball off the ceiling and floor
-        if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
-            self.ball_velocity[1] *= -1
+                        powerup.set_pos(None)
+                        player.add_powerup(powerup)
 
     # https://gamedev.stackexchange.com/questions/4253/in-pong-how-do-you-calculate-the-balls-direction-when-it-bounces-off-the-paddl
-    def update_ball_velocity(self, paddle_num):
+    def update_ball_velocity(self, player_id):
         # Select which paddle and paddle_width to evaluate and reset the ball position so it's not off the screen
         paddle_pos = 0
         paddle_width = 0
-        if paddle_num == 1:
-            paddle_pos = self.paddle_pos1
-            paddle_width = self.paddle_width1
-            self.ball_pos[0] = X_CONSTRAINTS[0]
-        else:
-            paddle_pos = self.paddle_pos2
-            paddle_width = self.paddle_width2
-            self.ball_pos[0] = X_CONSTRAINTS[1]
+        for player in self.players:
+            if player.get_id() == player_id:
+                paddle_pos = player.get_paddle_pos()
+                paddle_width = player.get_paddle_width()
+                self.ball_pos[0] = X_CONSTRAINTS[player_id - 1]
 
         # Calculate the angle and update the velocity
         relative_intersectY = paddle_pos - self.ball_pos[1]
@@ -341,6 +368,11 @@ class PUP_Game_State:
         # Switch the direction if the sign is wrong
         if (prior_velocityX < 0 and self.ball_velocity[0] < 0) or (prior_velocityX > 0 and self.ball_velocity[0] > 0):
             self.ball_velocity[0] = -self.ball_velocity[0]
+
+    def increment_other_score(self, other_player_id):
+        for player in self.players:
+            if player.get_id() != other_player_id:
+                player.increment_score()
 
     def publish_state(self):
         (result, num) = self.client.publish(
