@@ -35,7 +35,7 @@ POWERUP_X_OFFSET = 200
 POWERUP_GENERATION_TIME = 2
 POWERUP_EFFECT_TIME = 5
 POWERUP_RADIUS = 20
-FASTBALL_SPEED_MULTIPLIER = 1.2
+FASTBALL_SPEED_MULTIPLIER = 1.5
 
 PADDLE_HALF = INITIAL_PADDLE_WIDTH // 2
 X_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
@@ -260,7 +260,7 @@ class PUP_Game_State:
                             self.ball_velocity[0] *= FASTBALL_SPEED_MULTIPLIER
                             self.ball_velocity[1] *= FASTBALL_SPEED_MULTIPLIER
                         elif powerup_type == "trackBall":
-                            self.paddle1_should_track = True
+                            player.set_paddle_should_track(True)
                         break
 
     def stop_powerup(self, powerup):
