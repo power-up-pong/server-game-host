@@ -43,6 +43,8 @@ Y_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
 X_MIDDLE = X_CONSTRAINTS[1] // 2
 Y_MIDDLE = Y_CONSTRAINTS[1] // 2
 
+DEV = False
+
 
 class PowerUp:
     def __init__(self):
@@ -86,7 +88,7 @@ class PUP_Player_State:
     def __init__(self, id):
         self.id = id
         self.score = 0
-        self.connected = False
+        self.connected = DEV
         self.paddle_pos = Y_MIDDLE
         self.paddle_width = INITIAL_PADDLE_WIDTH
         self.paddle_should_track = False
@@ -180,7 +182,7 @@ class PUP_Game_State:
     def reset(self):
         for player in self.players:
             player.set_paddle_width(INITIAL_PADDLE_WIDTH)
-            player.set_paddle_should_track(False)
+            player.set_paddle_should_track(DEV)
             player.clear_powerups()
 
         self.ball_pos = [X_MIDDLE, Y_MIDDLE]
@@ -299,16 +301,29 @@ class PUP_Game_State:
         self.ball_pos[0] += self.ball_velocity[0]
         self.ball_pos[1] += self.ball_velocity[1]
 
+        # Keep the ball in the constraints
+        if self.ball_pos[1] < Y_CONSTRAINTS[0]:
+            self.ball_pos[1] = Y_CONSTRAINTS[0]
+        elif self.ball_pos[1] > Y_CONSTRAINTS[1]:
+            self.ball_pos[1] = Y_CONSTRAINTS[1]
+
         for player in self.players:
             # Set paddle position to ball position (plus an offset) if trackBall powerup is activated
+            paddle_width = player.get_paddle_width()
+            paddle_half = paddle_width // 2
             if player.get_paddle_should_track():
-                player.set_paddle_pos(self.ball_pos[1] + self.track_offset)
+                new_paddle_pos = self.ball_pos[1] + self.track_offset
+                if 0 <= new_paddle_pos <= MAX_PADDLE_VALUE:
+                    player.set_paddle_pos(new_paddle_pos)
+                elif new_paddle_pos > MAX_PADDLE_VALUE:
+                    player.set_paddle_pos(MAX_PADDLE_VALUE)
+                else:
+                    player.set_paddle_pos(0)
 
             player_id = player.get_id()
             paddle_pos = player.get_paddle_pos()
-            paddle_width = player.get_paddle_width()
-            paddle_top = paddle_pos + paddle_width // 2
-            paddle_bottom = paddle_pos - paddle_width // 2
+            paddle_top = paddle_pos + paddle_half
+            paddle_bottom = paddle_pos - paddle_half
 
             self.handle_paddle_ball_bounce(
                 player_id, paddle_bottom, paddle_top)
@@ -316,14 +331,14 @@ class PUP_Game_State:
             self.check_powerup_hits(player)
 
         # Bounce the ball off the ceiling and floor
-        if self.ball_pos[1] < Y_CONSTRAINTS[0] or self.ball_pos[1] > Y_CONSTRAINTS[1]:
+        if self.ball_pos[1] <= Y_CONSTRAINTS[0] or self.ball_pos[1] >= Y_CONSTRAINTS[1]:
             self.ball_velocity[1] *= -1
 
     def handle_paddle_ball_bounce(self, player_id, paddle_bottom, paddle_top):
         # Once the ball reaches the player's side of the screen...
         if (player_id == 1 and self.ball_pos[0] < X_CONSTRAINTS[0]) or (player_id == 2 and self.ball_pos[0] > X_CONSTRAINTS[1]):
             # Check if the ball hits a player's paddle. If it does, update ball velocity. Otherwise, increase the other player's score and reset
-            if paddle_bottom < self.ball_pos[1] < paddle_top:
+            if paddle_bottom <= self.ball_pos[1] <= paddle_top:
                 self.update_ball_velocity(player_id)
                 self.last_hit = player_id
                 self.track_offset = self.generate_track_offset()
@@ -337,7 +352,7 @@ class PUP_Game_State:
             powerup_pos = powerup.get_pos()
             # If the ball hits an unclaimed powerup, give it to the player who last hit the ball
             if powerup_pos is not None:
-                if powerup_pos[0] - POWERUP_RADIUS < self.ball_pos[0] < powerup_pos[0] + POWERUP_RADIUS and powerup_pos[1] - POWERUP_RADIUS < self.ball_pos[1] < powerup_pos[1] + POWERUP_RADIUS:
+                if powerup_pos[0] - POWERUP_RADIUS <= self.ball_pos[0] <= powerup_pos[0] + POWERUP_RADIUS and powerup_pos[1] - POWERUP_RADIUS <= self.ball_pos[1] <= powerup_pos[1] + POWERUP_RADIUS:
                     if self.last_hit == player.get_id():
                         powerup.set_owner(self.last_hit)
                         powerup.set_pos(None)
