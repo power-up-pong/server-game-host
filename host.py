@@ -28,12 +28,12 @@ BUTTON_TOPIC = "pup/button"
 INITIAL_PADDLE_WIDTH = 200
 MAX_PADDLE_VALUE = 1023
 GAME_CYCLE = 0.03
-TIME_AFTER_SCORE = 1
+TIME_AFTER_SCORE_SEC = 1
 MAX_BOUNCE_ANGLE = math.pi * 5 / 12
 BALL_SPEED = 20
 POWERUP_X_OFFSET = 200
-POWERUP_GENERATION_TIME = 2
-POWERUP_EFFECT_TIME = 5
+POWERUP_GENERATION_TIME_SEC = 2
+POWERUP_EFFECT_TIME_SEC = 5
 POWERUP_RADIUS = 20
 FASTBALL_SPEED_MULTIPLIER = 1.5
 
@@ -156,7 +156,7 @@ class PUP_Player_State:
         if len(self.powerups) > 0:
             powerup_time = self.powerups[0].get_time_used()
             if powerup_time is not None:
-                if time() - powerup_time > POWERUP_EFFECT_TIME:
+                if time() - powerup_time > POWERUP_EFFECT_TIME_SEC:
                     return self.pop_powerup()
         return None
 
@@ -191,7 +191,7 @@ class PUP_Game_State:
         self.powerups = []
         self.powerup_timer = time()
         self.publish_state()
-        sleep(TIME_AFTER_SCORE)
+        sleep(TIME_AFTER_SCORE_SEC)
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -286,7 +286,7 @@ class PUP_Game_State:
             sleep(GAME_CYCLE)
 
     def handle_powerups(self):
-        if time() - self.powerup_timer > POWERUP_GENERATION_TIME:
+        if time() - self.powerup_timer > POWERUP_GENERATION_TIME_SEC:
             self.generate_powerup()
             self.powerup_timer = time()
         self.handle_expired_powerups()
