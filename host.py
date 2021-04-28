@@ -13,8 +13,8 @@ import math
 from time import sleep, time
 
 # Constants
-# BROKER = 'iot.cs.calvin.edu'
-BROKER = 'mqtt.eclipseprojects.io'
+BROKER = 'iot.cs.calvin.edu'
+# BROKER = 'mqtt.eclipseprojects.io'
 PORT = 1883
 QOS = 0
 USERNAME = 'cs326'  # broker username (if required)
@@ -44,7 +44,7 @@ Y_CONSTRAINTS = [-PADDLE_HALF, MAX_PADDLE_VALUE + PADDLE_HALF]
 X_MIDDLE = X_CONSTRAINTS[1] // 2
 Y_MIDDLE = Y_CONSTRAINTS[1] // 2
 
-DEV = True
+DEV = False
 
 
 class PowerUp:
